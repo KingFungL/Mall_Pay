@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Select;
  * @create 2022-12-29 1:06 下午
  * @Description:
  */
-@Mapper
+
 public interface CategoryMapper {
 
     @Select("select * from mall_category where id = #{id}")
