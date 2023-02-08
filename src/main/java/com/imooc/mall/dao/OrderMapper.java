@@ -1,8 +1,6 @@
 package com.imooc.mall.dao;
 
 import com.imooc.mall.pojo.Order;
-import org.apache.ibatis.annotations.Mapper;
-
 
 public interface OrderMapper {
     int deleteByPrimaryKey(Integer id);

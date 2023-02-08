@@ -544,3 +544,853 @@ appid：
 
 openid（微信）：
 
+
+
+### 7.1 项目初始化 && 对接Native支付
+
+SpringBoot:2.1.7.RELEASE
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.1.7.RELEASE</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+    <groupId>com.imooc</groupId>
+    <artifactId>pay</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>pay</name>
+    <description>Demo project for Spring Boot</description>
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis.spring.boot</groupId>
+            <artifactId>mybatis-spring-boot-starter</artifactId>
+            <version>2.1.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/cn.springboot/best-pay-sdk -->
+        <dependency>
+            <groupId>cn.springboot</groupId>
+            <artifactId>best-pay-sdk</artifactId>
+            <version>1.3.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>RELEASE</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.mybatis.generator</groupId>
+                <artifactId>mybatis-generator-maven-plugin</artifactId>
+                <version>1.3.7</version>
+                <configuration>
+                    <overwrite>true</overwrite>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+```
+
+
+
+支付Github源码：https://github.com/Pay-Group/best-pay-sdk
+
+
+
+### 7.2 Native支付业务逻辑实现
+
+IPayService.java
+
+```java
+public interface IPayService {
+
+    void create(String orderId, BigDecimal amount);
+}
+```
+
+
+
+PayService.java
+
+```java
+@Slf4j
+@Service
+public class PayService implements IPayService {
+
+
+    @Override
+    public void create(String orderId, BigDecimal amount) {
+        //微信支付配置
+        WxPayConfig wxPayConfig = new WxPayConfig();
+        wxPayConfig.setAppId("wxd898fcb01713c658");          //公众号Id
+        wxPayConfig.setMchId("1483469312");      //商户Id
+        wxPayConfig.setMchKey("7mdApPMfXddfWWbbP4DUaVYm2wjyh3v3");       //商户密钥
+        wxPayConfig.setNotifyUrl("http://127.0.0.1");   //接送支付平台异步通知的地址
+
+        BestPayServiceImpl bestPayService = new BestPayServiceImpl();
+        bestPayService.setWxPayConfig(wxPayConfig);
+
+        //发起支付
+        PayRequest request = new PayRequest();
+        request.setOrderName("8783955-最好的支付sdk1");
+        request.setOrderId(orderId);
+        request.setOrderAmount(amount.doubleValue());
+        request.setPayTypeEnum(BestPayTypeEnum.WXPAY_NATIVE);
+
+
+        PayResponse response = bestPayService.pay(request);
+        log.info("response={}", response);
+    }
+}
+```
+
+单元测试类
+
+```java
+public class PayServiceTest extends PayApplicationTests {
+
+    @Autowired
+    private PayService payService;
+
+    @Test
+    public void create() {
+        //BigDecimal.valueOf(0.01)
+        payService.create("12345678912345643214", BigDecimal.valueOf(0.01));
+    }
+}
+```
+
+
+
+Postman请求url：https://api.mch.weixin.qq.com/pay/unifiedorder  方式：POST
+
+<xml>
+
+   <appid>wxd898fcb01713c658</appid>
+
+   <mch_id>1483469312</mch_id>
+
+   <nonce_str>I7O79rYuVi00n7HM</nonce_str>
+
+   <sign>407D2B7E86527352493BC6FC76863927</sign>
+
+   <body>8783955-最好的支付sdk1</body>
+
+   <notify_url>http://127.0.0.1</notify_url>
+
+   <out_trade_no>12345678912345643214</out_trade_no>
+
+   <spbill_create_ip>8.8.8.8</spbill_create_ip>
+
+   <total_fee>1</total_fee>
+
+   <trade_type>NATIVE</trade_type>
+
+</xml>
+
+常见报错：1.商户id（mcn_id）、mcn_key错误， <return_msg><![CDATA[签名错误]]></return_msg>；
+
+2.appid错误， <return_msg><![CDATA[AppID不存在，请检查后再试]]></return_msg>
+
+3.order_id重复或者order_name，err_code = INVALID_REQUEST err_code_des=201 商户订单号重复
+
+
+
+### 7.3 前端生成二维码
+
+BootCDN:开源的前端项目库 ——>jquery  ——>jquery-qrcode
+
+
+
+Create.ftl
+
+```html
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>支付</title>
+</head>
+<body>
+<div id="myQrcode"></div>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery.qrcode/1.0/jquery.qrcode.min.js"></script>
+<script>
+    //jQuery('#qrcode').qrcode("this plugin is great");
+
+    jQuery('#myQrcode').qrcode({
+        text   : "${codeUrl}"
+    });
+</script>
+</body>
+</html>
+```
+
+
+
+PayController.java
+
+```java
+@Controller
+@RequestMapping("/pay")
+public class PayController {
+
+    @Autowired
+    private PayService payService;
+
+    @GetMapping("/create")
+    public ModelAndView create(@RequestParam("orderId") String orderId,
+                               @RequestParam("amount") BigDecimal amount){
+
+        PayResponse response = payService.create(orderId,amount);
+        Map map = new HashMap<>();
+
+        map.put("codeUrl", response.getCodeUrl());
+        return new ModelAndView("create",map);
+    }
+
+}
+```
+
+
+
+
+
+### 7.4 微信异步通知
+
+问题1:notify_url要在微信后台设置吗？   问题2:notify_url一定要用域名吗？
+
+notify_url:异步接受微信支付结果通知的回调地址，通知url必须为外网可访问的url，不能携带参数。
+
+解决方案：NATAPP.cn —— 内网穿透应用
+
+
+
+PayService.java
+
+```java
+/**
+* 异步通知
+* @param notifyData
+*
+*/
+@Override
+public String asyncNotify(String notifyData) {
+    //1.签名验证
+    PayResponse payResponse = bestPayService.asyncNotify(notifyData);
+    log.info("payResponse={}",payResponse);
+
+    //2.金额校验（数据库查看订单）
+
+
+    //3.修改订单支付状态
+
+    //4.告诉微信不要再通知
+    return "<xml>\n" +
+            "\n" +
+            " <return_code><!CDATA[SUCCESS}}></return_code>\n" +
+            " <return_msg><![CDATA[OK]]></return_msg>\n" +
+            "</xml>";
+}
+```
+
+请求数据
+
+```xml
+<xml>
+   <appid>wxd898fcb01713c658</appid>
+   <mch_id>1483469312</mch_id>
+   <nonce_str>dgxHN97fHS4Z90CW</nonce_str>
+   <sign>E75C3680607A3D0849D7DF9BD0A93C68</sign>
+   <body>8783955-最好的支付sdk1</body>
+   <notify_url>http://53a6165b577dc348.natapp.cc/pay/notify</notify_url>
+   <out_trade_no>12345415532114312</out_trade_no>
+   <spbill_create_ip>8.8.8.8</spbill_create_ip>
+   <total_fee>1</total_fee>
+   <trade_type>NATIVE</trade_type>
+</xml>
+```
+
+返回的通知(里面含二维码的url：code_url)
+
+```xml
+<xml>
+  <return_code><![CDATA[SUCCESS]]></return_code>
+  <return_msg><![CDATA[OK]]></return_msg>
+  <result_code><![CDATA[SUCCESS]]></result_code>
+  <mch_id><![CDATA[1483469312]]></mch_id>
+  <appid><![CDATA[wxd898fcb01713c658]]></appid>
+  <nonce_str><![CDATA[xorEGmQcsyJuFp2I]]></nonce_str>
+  <sign><![CDATA[CCFB14AE914E080D22C529375EFC27E3]]></sign>
+  <prepay_id><![CDATA[wx06133725654844ea617fe67e6f8f4e0000]]></prepay_id>
+  <trade_type><![CDATA[NATIVE]]></trade_type>
+  <code_url><![CDATA[weixin://wxpay/bizpayurl?pr=hW9LbIyzz]]></code_url>
+</xml>
+```
+
+
+
+### 7.5 支付宝PC支付业务实现
+
+PayController.java
+
+```java
+@GetMapping("/create")
+public ModelAndView create(@RequestParam("orderId") String orderId,
+                           @RequestParam("amount") BigDecimal amount,
+                           @RequestParam("payType") BestPayTypeEnum bestPayTypeEnum){
+
+    PayResponse response = payService.create(orderId, amount, bestPayTypeEnum);
+    Map<String, String> map = new HashMap<>();
+
+    //支付方式不同，渲染方式就不同，WXPAY_NATIVE使用code_url,ALIPAY_PC使用body
+    if(bestPayTypeEnum == BestPayTypeEnum.WXPAY_NATIVE){
+        map.put("codeUrl", response.getCodeUrl());
+        return new ModelAndView("createForWxNative",map);
+    }else if(bestPayTypeEnum == BestPayTypeEnum.ALIPAY_PC){
+        map.put("body", response.getBody());
+        return new ModelAndView("createForAlipayPc",map);
+    }
+    throw new RuntimeException("暂不支持的支付类型");
+}
+```
+
+Alipay会提供一个可潜入html使用的body(直接跳转)
+
+```html
+<!doctype html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>支付</title>
+</head>
+<body>
+${body}
+
+</body>
+</html>
+```
+
+
+
+### 7.6 数据库
+
+建表
+
+```sql
+CREATE TABLE `mall_pay_info` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL COMMENT '用户id',
+  `order_no` bigint NOT NULL COMMENT '订单号',
+  `pay_platform` int DEFAULT NULL COMMENT '支付平台:1-支付宝,2-微信',
+  `platform_number` varchar(200) DEFAULT NULL COMMENT '支付流水号',
+  `platform_status` varchar(20) DEFAULT NULL COMMENT '支付状态',
+  `pay_amount` decimal(20,2) NOT NULL COMMENT '支付金额',
+  `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uqe_order_no` (`order_no`),
+  UNIQUE KEY `uqe_platform_number` (`platform_number`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb3;
+```
+
+设置order_no、platform_number不可重复。
+
+DEFAULT CURRENT_TIMESTAMP COMMENT为当前时间默认值；
+
+DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT为每次更新数据后获取并更新当前的时间
+
+
+
+实现异步通知(PayService.java)
+
+```java
+/**
+* 异步通知
+* @param notifyData
+*
+*/
+@Override
+public String asyncNotify(String notifyData) {
+    //1.签名验证
+    PayResponse payResponse = bestPayService.asyncNotify(notifyData);
+    log.info("payResponse={}",payResponse);
+
+    //2.金额校验（数据库查看订单）
+    //比较严重（正常情况下不会发生） 发出告警：钉钉、短信
+    PayInfo payInfo = payInfoMapper.selectByOrderNo(Long.parseLong(payResponse.getOrderId()));
+    if(payInfo == null){
+
+        throw new RuntimeException("通过orderNo查询到到结果是null");
+    }
+    //如果订单状态不是已支付
+    if(!payInfo.getPlatformStatus().equals(OrderStatusEnum.SUCCESS.name())){
+        if(payInfo.getPayAmount().compareTo(BigDecimal.valueOf(payResponse.getOrderAmount())) != 0){
+            //告警
+            throw new RuntimeException("异步通知中到金额和数据库里到不一致,orderNo=" + payResponse.getOrderId());
+        }
+
+        //3.修改订单支付状态
+        payInfo.setPlatformStatus(OrderStatusEnum.SUCCESS.name());
+        payInfoMapper.updateByPrimaryKeySelective(payInfo);
+    }
+    
+    //4.告诉微信、支付宝不要再通知
+    if(payResponse.getPayPlatformEnum() == BestPayPlatformEnum.WX){
+        return "<xml>\n" +
+                "\n" +
+                " <return_code><!CDATA[SUCCESS}}></return_code>\n" +
+                " <return_msg><![CDATA[OK]]></return_msg>\n" +
+                "</xml>";
+    }else if(payResponse.getPayPlatformEnum() == BestPayPlatformEnum.ALIPAY){
+        return "success";
+    }
+    throw new RuntimeException("异步通知中错误的支付类型");
+}
+```
+
+
+
+### 7.7 支付完成页面跳转
+
+ajax ——> api（通过订单号查询支付状态）
+
+已支付 ——> 跳转
+
+方便读取配置，可以单独把微信配置写出来后传入
+
+BestPayConfig.java
+
+```java
+@Component
+public class BestPayConfig {
+
+    @Bean
+    public WxPayConfig wxPayConfig(){
+        //微信支付配置
+        WxPayConfig wxPayConfig = new WxPayConfig();
+        wxPayConfig.setAppId("wxd898fcb01713c658");          //公众号Id
+        wxPayConfig.setMchId("1483469312");      //商户Id
+        wxPayConfig.setMchKey("7mdApPMfXddfWWbbP4DUaVYm2wjyh3v3");       //商户密钥
+        wxPayConfig.setNotifyUrl("http://king-mall.nat300.top/pay/notify");   //接送支付平台异步通知的地址
+        wxPayConfig.setReturnUrl("http://127.0.0.1");
+
+        return wxPayConfig;
+    }
+
+}
+```
+
+PayController.java中加入
+
+```java
+@Autowired
+    private WxPayConfig wxPayConfig;
+```
+
+```java
+map.put("returnUrl", wxPayConfig.getReturnUrl());
+```
+
+就可以获得配置文件中的配置
+
+
+
+### 7.8 规范配置
+
+在application.yml中配置微信支付配置
+
+```yaml
+wx:
+  appid: wxd898fcb01713c658
+  mchId: 1483469312
+  mchKey: 7mdApPMfXddfWWbbP4DUaVYm2wjyh3v3
+  notifyUrl: http://king-mall:nat300:top/pay/notify
+  returnUrl: http://127:0:0:1
+```
+
+新建WxAccountConfig.java对象类
+
+```java
+@Component
+@ConfigurationProperties(prefix = "wx")
+@Data
+public class WxAccountConfig {
+
+    private String appId;
+
+    private String mchId;
+
+    private String mchKey;
+
+    private String notifyUrl;
+
+    private String returnUrl;
+}
+```
+
+在主配置中实例配置对象
+
+```java
+@Autowired
+    private WxAccountConfig wxAccountConfig;
+
+@Bean
+    public WxPayConfig wxPayConfig(){
+        //微信支付配置
+        WxPayConfig wxPayConfig = new WxPayConfig();
+        wxPayConfig.setAppId(wxAccountConfig.getAppId());          //公众号Id
+        wxPayConfig.setMchId(wxAccountConfig.getMchId());      //商户Id
+        wxPayConfig.setMchKey(wxAccountConfig.getMchKey());       //商户密钥
+        wxPayConfig.setNotifyUrl(wxAccountConfig.getNotifyUrl());   //接送支付平台异步通知的地址
+        wxPayConfig.setReturnUrl(wxAccountConfig.getReturnUrl());
+
+        return wxPayConfig;
+    }
+```
+
+
+
+## 8.商城Mall
+
+### 8.1 用户模块开发
+
+Content-Type:application/json
+
+开发顺序：Dao->Service->Controller
+
+单元测试：Service层   Mybatis打印SQL语句
+
+
+
+### 8.2 Service-完成注册功能
+
+Mybatis-generator生成User UserMapper.xml UserMapper.java 
+
+新建service层 IUserService.java(Interface) UserServiceImpl.java
+
+```xml
+	<select id="countByUsername" parameterType="java.lang.String" resultType="java.lang.Integer">
+    select
+    count(1)
+    from mall_user
+    where username = #{username,jdbcType=VARCHAR}
+  </select>
+  <select id="countByEmail" parameterType="java.lang.String" resultType="java.lang.Integer">
+    select
+      count(1)
+    from mall_user
+    where email = #{email,jdbcType=VARCHAR}
+  </select>
+```
+
+单元测试控制台输出的结果
+
+第一行：SQL语句（可复制到mysql控制台验证查询结果）；第二行：查询到参数
+
+第三行：列的字段；  第四行：行——表示每个字段对应的数据
+
+第五行Total：代表有多少行
+
+```
+==>  Preparing: select id, order_no, user_id, shipping_id, payment, payment_type, postage, status, payment_time, send_time, end_time, close_time, create_time, update_time from mall_order where id = ? 
+==> Parameters: 4(Integer)
+<==    Columns: id, order_no, user_id, shipping_id, payment, payment_type, postage, status, payment_time, send_time, end_time, close_time, create_time, update_time
+<==        Row: 4, 105, 113, 603, 491.04, 193, 623, 787, 2005-10-15 04:07:15, 2021-04-12 09:00:24, 2008-02-27 05:13:32, 2015-09-09 07:39:01, 2002-06-28 00:20:10, 2019-11-18 20:22:54
+<==      Total: 1
+```
+
+
+
+### 8.3 Controller实现
+
+接受前端传来的数据(使用**urlencoded**)
+
+方法一：指定value 后面的参数名随意（如果不指定value后面的参数名要和实体对象的属性一样
+
+```java
+@PostMapping("/register")
+public void register(@RequestParam(value = "username") String userName){
+    log.info("username={}", userName);
+}
+```
+
+方法二：通过实例对象来获取前端传来的参数
+
+```java
+@PostMapping("/register")
+public void register(User user){
+    log.info("username={}", user.getUsername());
+}
+```
+
+
+
+若是通过**json**格式传来的(加上@RequestBody注解才有效)
+
+```java
+@PostMapping("/register")
+    public void register(@RequestBody User user){
+        log.info("username={}", user.getUsername());
+    }
+```
+
+
+
+Vo统称为返回前端的数据(使用泛型可以多个类型复用)
+
+```java
+public class ResponseVo<T> {
+
+    private Integer status;
+
+    private String msg;
+
+    private T data;
+
+    public ResponseVo(Integer status, String msg) {
+        this.status = status;
+        this.msg = msg;
+    }
+
+    public static <T> ResponseVo<T> success(String msg){
+        return new ResponseVo<>(0,msg);
+    }
+}
+```
+
+新版本用法（返回json中取出data=null）
+
+```java
+@JsonInclude(value = JsonInclude.Include.NON_NULL)
+```
+
+
+
+### 8.4 错误状态码使用枚举
+
+枚举类
+
+```java
+@Getter
+public enum ResponseEnum {
+
+    ERROR(-1, "服务端错误"),
+
+    SUCCESS(0, "成功"),
+
+    PASSWORD_ERROR(1, "密码错误"),
+
+    USER_EXIST(2, "用户已存在"),
+
+    NEED_LOGIN(10, "用户未登录,请先登录"),
+
+    ;
+
+
+    Integer code;
+
+    String desc;
+
+    ResponseEnum(Integer code, String desc){
+        this.code = code;
+        this.desc = desc;
+    }
+
+}
+```
+
+
+
+Vo重建构造方法封装枚举对象()
+
+```java
+		public static <T> ResponseVo<T> success(){
+        return new ResponseVo<>(ResponseEnum.SUCCESS.getCode(), ResponseEnum.SUCCESS.getDesc());
+    }
+
+    public static <T> ResponseVo<T> error(ResponseEnum responseEnum){
+        return new ResponseVo<>(responseEnum.getCode(), responseEnum.getDesc());
+    }
+```
+
+
+
+### 8.5 表单验证
+
+步骤：新建form包下再新建UserForm.java类
+
+```java
+@Data
+public class UserForm {
+
+    //@NotBlank //用于String 判断空格
+    //@NotEmpty 用于集合
+    //@NotNull
+    @NotBlank(message = "用户名不能为空")
+    private String username;
+
+    @NotBlank
+    private String password;
+
+    @NotBlank
+    private String email;
+}
+
+```
+
+
+
+把验证状态码和结果信息传给前端
+
+封装把错误信息传给msg
+
+```java
+public static <T> ResponseVo<T> error(ResponseEnum responseEnum, String msg){
+        return new ResponseVo<>(responseEnum.getCode(), msg);
+    }
+
+    public static <T> ResponseVo<T> error(ResponseEnum responseEnum, BindingResult bindingResult){
+        return new ResponseVo<>(responseEnum.getCode(),
+                Objects.requireNonNull(bindingResult.getFieldError().getField()) + " " + bindingResult.getFieldError().getDefaultMessage());
+    }
+```
+
+
+
+把bindingResult记录的错误信息给返回给msg再传给前端
+
+```java
+@PostMapping("/register")
+    public ResponseVo register(@Valid @RequestBody UserForm userForm,
+                               BindingResult bindingResult){
+        if(bindingResult.hasErrors()){
+            log.info("注册提交的参数有误，{} {}",
+                    Objects.requireNonNull(bindingResult.getFieldError()).getField(),
+                    bindingResult.getFieldError().getDefaultMessage());
+            return ResponseVo.error(ResponseEnum.PARAM_ERROR,
+                    bindingResult);
+        }
+
+        log.info("username={}", userForm.getUsername());
+        //return ResponseVo.success();
+        return ResponseVo.error(ResponseEnum.NEED_LOGIN);
+    }
+```
+
+
+
+### 8.6 接入service完成注册功能
+
+调整返回的json格式
+
+调整前：
+
+```json
+{
+    "timestamp": "2023-02-07T08:41:01.812+0000",
+    "status": 500,
+    "error": "Internal Server Error",
+    "message": "意外错误",
+    "path": "/user/register"
+}
+```
+
+新建exception包和捕获异常类
+
+```java
+@ControllerAdvice
+public class RuntimeExceptionHandler {
+
+    @ExceptionHandler(RuntimeException.class)
+    @ResponseBody
+    //@ResponseStatus(HttpStatus.FORBIDDEN)
+    public ResponseVo handle(RuntimeException e){
+        return ResponseVo.error(ResponseEnum.ERROR, e.getMessage());
+    }
+}
+```
+
+调整后：
+
+```json
+{
+    "status": -1,
+    "msg": "意外错误"
+}
+```
+
+
+
+### 8.7 用户模块开发——登陆
+
+service层的实现类（为了更安全，一概提示用户名或密码错误）
+
+```java
+@Override
+    public ResponseVo<User> login(String username, String password) {
+        User user = userMapper.selectByUsername(username);
+        if(user == null){
+            //用户不存在(返回用户名或密码错误)
+            return ResponseVo.error(ResponseEnum.USERNAME_OR_PASSWORD_ERROR);
+        }
+
+        if(!user.getPassword().equalsIgnoreCase(
+                DigestUtils.md5DigestAsHex(user.getPassword().getBytes(StandardCharsets.UTF_8)))){
+            //密码错误(返回用户名或密码错误)
+            return ResponseVo.error(ResponseEnum.USERNAME_OR_PASSWORD_ERROR);
+        }
+
+        return ResponseVo.success();
+    }
+```
+
+
+
+Session和Cookie的使用
+
+新建一个存在常量的包，用类存储常量 consts.MallConst
+
+```java
+public class MallConst {
+    public static final String CURRENT_USER = "currentUser";
+}
+```
+

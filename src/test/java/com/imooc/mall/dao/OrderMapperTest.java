@@ -31,7 +31,7 @@ public class OrderMapperTest extends MallApplicationTests {
 
     @Test
     public void selectByPrimaryKey() {
-        Order order = orderMapper.selectByPrimaryKey(1);
+        Order order = orderMapper.selectByPrimaryKey(4);
         System.out.println(order);
     }
 
