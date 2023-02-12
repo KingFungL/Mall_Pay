@@ -60,9 +60,7 @@ public class UserController {
                                   BindingResult bindingResult,
                                   HttpSession session){
         if(bindingResult.hasErrors()){
-            log.info("注册提交的参数有误，{} {}",
-                    Objects.requireNonNull(bindingResult.getFieldError()).getField(),
-                    bindingResult.getFieldError().getDefaultMessage());
+
             return ResponseVo.error(ResponseEnum.PARAM_ERROR, bindingResult);
         }
 

@@ -7,6 +7,7 @@ import com.imooc.mall.pojo.User;
 import com.imooc.mall.service.IUserService;
 import com.imooc.mall.vo.ResponseVo;
 import jdk.nashorn.internal.runtime.events.RecompilationEvent;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
  * @Description:
  */
 @Service
+@Slf4j
 public class UserServiceImpl implements IUserService{
 
     @Autowired
@@ -29,7 +31,7 @@ public class UserServiceImpl implements IUserService{
     */
     @Override
     public ResponseVo<User> register(User user) {
-        error();
+        //error();
 
         //username不能重复
         int countByUsername = userMapper.countByUsername(user.getUsername());
@@ -73,8 +75,12 @@ public class UserServiceImpl implements IUserService{
         if(!user.getPassword().equalsIgnoreCase(
                 DigestUtils.md5DigestAsHex(password.getBytes(StandardCharsets.UTF_8)))){
             //密码错误(返回用户名或密码错误)
+            log.info(user.getPassword());
+            log.info(DigestUtils.md5DigestAsHex(password.getBytes(StandardCharsets.UTF_8)));
             return ResponseVo.error(ResponseEnum.USERNAME_OR_PASSWORD_ERROR);
         }
+
+        user.setPassword("");
 
         return ResponseVo.success(user);
     }

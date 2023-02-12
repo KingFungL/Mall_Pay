@@ -1394,3 +1394,38 @@ public class MallConst {
 }
 ```
 
+
+
+#### 遇到的BUG一：
+
+DigestUtils.md5DigestAsHex(user.getPassword().getBytes(StandardCharsets.UTF_8))是把原字符串加密后生成的字符串，因此不能直接从数据库中复制相同的密码作为输入，否则报错，应该输入原本注册时候的字符串，会自动解码为与数据库相同的加密字符串
+
+
+
+根据自定义来设置返回的data  重写ResponseVo方法和success方法 直接把范型data传入并处理
+
+```java
+private ResponseVo(Integer status, String msg) {
+        this.status = status;
+        this.msg = msg;
+    }
+
+    private ResponseVo(Integer status, T data) {
+        this.status = status;
+        this.data = data;
+    }
+
+    public static <T> ResponseVo<T> successByMsg(String msg){
+        return new ResponseVo<>(ResponseEnum.SUCCESS.getCode(),msg);
+    }
+
+    public static <T> ResponseVo<T> success(T data){
+        return new ResponseVo<>(ResponseEnum.SUCCESS.getCode(), data);
+    }
+```
+
+返回了对象的密码（需要避免）通常在获取Get对象后 加上 user.setPassword("");
+
+
+
+### 
