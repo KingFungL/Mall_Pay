@@ -68,12 +68,15 @@ public class UserController {
 
         //设置Session
         session.setAttribute(MallConst.CURRENT_USER , userResponseVo.getData());
+        log.info("/login sessionId={}", session.getId());
 
         return userResponseVo;
     }
 
+    //session保存在内存里，容易丢失
     @GetMapping("/user")
     public ResponseVo<User> userInfo(HttpSession session){
+        log.info("/user sessionId ={}", session.getId());
         User user = (User) session.getAttribute(MallConst.CURRENT_USER);
         if(user == null){
             return ResponseVo.error(ResponseEnum.NEED_LOGIN);
@@ -82,5 +85,15 @@ public class UserController {
          return ResponseVo.success(user);
     }
 
+    @PostMapping("/user/logout")
+    public ResponseVo<User> logout(HttpSession session){
+        log.info("/user/logout sessionId={}", session.getId());
+        User user =(User) session.getAttribute(MallConst.CURRENT_USER);
+        if(user == null){
+            return ResponseVo.error(ResponseEnum.NEED_LOGIN);
+        }
+        session.removeAttribute(MallConst.CURRENT_USER);
+        return ResponseVo.success();
+    }
 
 }

@@ -1428,4 +1428,43 @@ private ResponseVo(Integer status, String msg) {
 
 
 
-### 
+### 8.8 Session和Cookie
+
+session保存在内容里，容易丢失  改进版本：token+redis
+
+```java
+//设置Session
+        session.setAttribute(MallConst.CURRENT_USER , userResponseVo.getData());
+        log.info("/login sessionId={}", session.getId());
+       
+```
+
+```java
+User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+```
+
+localhost是域名 127.0.0.1是ip地址 两者也算跨域
+
+cookie跨域
+
+
+
+退出登陆：
+
+```java
+@PostMapping("/user/logout")
+    public ResponseVo<User> logout(HttpSession session){
+        log.info("/user/logout sessionId={}", session.getId());
+        User user =(User) session.getAttribute(MallConst.CURRENT_USER);
+        if(user == null){
+            return ResponseVo.error(ResponseEnum.NEED_LOGIN);
+        }
+        session.removeAttribute(MallConst.CURRENT_USER);
+        return ResponseVo.success();
+    }
+```
+
+
+
+前端 ——> Java
+
