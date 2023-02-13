@@ -1464,7 +1464,84 @@ cookie跨域
     }
 ```
 
+```
+/**
+* {@link org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory}
+ * 
+*/
+```
+
+SessionTimeOut最少设置1分钟，源码中有对1分钟与输入值取最大值的操作
 
 
-前端 ——> Java
+
+### 8.9 拦截器
+
+用于判断登陆状态
+
+Interceptor - Url
+
+AOP - 包名
+
+
+
+新建用户登陆拦截器 UserLoginInterceptor.java
+
+重写preHandle方法（执行前判断拦截）
+
+```java
+@Slf4j
+public class UserLoginInterceptor implements HandlerInterceptor {
+    /**
+    * true表示继续流程，false表示中断
+    * @param request
+     * @param response
+     * @param handler
+    * @return
+     * @throws Exception
+    */
+    @Override
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        log.info("preHanler...");
+        User user =(User) request.getSession().getAttribute(MallConst.CURRENT_USER);
+        if(user == null){
+            log.info("user==null");
+            return false;
+//            return ResponseVo.error(ResponseEnum.NEED_LOGIN);
+        }
+        return true;
+    }
+}
+```
+
+
+
+配置拦截器 InterceptorConfig.java
+
+重写WebMvcConfigurer 注册UserLoginInterceptor并交给容器管理
+
+```java
+@Configuration
+public class InterceptorConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new UserLoginInterceptor())  //注册UserLoginInterceptor
+                .addPathPatterns("/**")
+                .excludePathPatterns("/user/login", "/user/register");
+    }
+}
+```
+
+当未登陆时返回的信息**：不推荐：**response.getWriter().print("error");
+
+**推荐：**抛异常 throw new UserLoginException();
+
+```java
+    @ExceptionHandler(UserLoginException.class)
+    @ResponseBody
+    public ResponseVo userLoginHandle(){
+        return ResponseVo.error(ResponseEnum.NEED_LOGIN);
+    }
+```
 

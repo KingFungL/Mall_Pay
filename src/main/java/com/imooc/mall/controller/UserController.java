@@ -85,13 +85,14 @@ public class UserController {
          return ResponseVo.success(user);
     }
 
+    /**
+    * {@link org.springframework.boot.web.embedded.tomcat.TomcatServletWebServerFactory}
+     *
+    */
     @PostMapping("/user/logout")
     public ResponseVo<User> logout(HttpSession session){
         log.info("/user/logout sessionId={}", session.getId());
-        User user =(User) session.getAttribute(MallConst.CURRENT_USER);
-        if(user == null){
-            return ResponseVo.error(ResponseEnum.NEED_LOGIN);
-        }
+
         session.removeAttribute(MallConst.CURRENT_USER);
         return ResponseVo.success();
     }
