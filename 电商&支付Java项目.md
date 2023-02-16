@@ -1545,3 +1545,86 @@ public class InterceptorConfig implements WebMvcConfigurer {
     }
 ```
 
+
+
+
+
+## 9. 类目功能开发
+
+### 9.1 多级目录
+
+（1）先查出1级目录 -> 查其子目录，一直查到null
+
+（2）查出目录 -> 查父目录，一直查到parent_id=0
+
+
+
+耗时：http（请求微信api） > 磁盘 > 内存
+
+mysql（内网+磁盘）
+
+Service层实现 (查询多级目录的全部数据输出到前端)
+
+```java
+@Service
+public class CategoryServiceImpl implements ICategoryService {
+
+    @Autowired
+    private CategoryMapper categoryMapper;
+
+    @Override
+    public ResponseVo<List<CategoryVo>> selectAll() {
+        List<CategoryVo> categoryVoList = new ArrayList<>();
+        List<Category> categoryList = categoryMapper.selectAll();
+
+        //查询partent_id = 0的数据 （for循环方式）
+//        for(Category category : categoryList){
+//            if(category.getParentId().equals(MallConst.ROOT_PARENT_ID)){
+//                CategoryVo categoryVo = new CategoryVo();
+//                BeanUtils.copyProperties(category, categoryVo);
+//                categoryVoList.add(categoryVo);
+//            }
+//        }
+
+        //Lambda表达式 + stream
+        categoryVoList = categoryList.stream()
+                .filter(e -> e.getParentId().equals(MallConst.ROOT_PARENT_ID))
+                .map(e -> category2CategoryVo(e))
+                .collect(Collectors.toList());
+
+        //查询子目录
+        findSubCategory(categoryVoList, categoryList);
+
+        return ResponseVo.success(categoryVoList);
+    }
+
+    private void findSubCategory(List<CategoryVo> categoryVoList, List<Category> categoryList){
+        for(CategoryVo categoryVo : categoryVoList){
+            List<CategoryVo> subCategoryVoList = new ArrayList<>();
+
+            for(Category category : categoryList){
+                //如果查到内容，设置subCategory，继续往下查
+                if(categoryVo.getId().equals(category.getParentId())){
+                    CategoryVo subCategoryVo = category2CategoryVo(category);
+                    subCategoryVoList.add(subCategoryVo);
+                }
+                //降序
+                subCategoryVoList.sort(Comparator.comparing(CategoryVo::getSortOrder).reversed());
+                categoryVo.setSubCategories(subCategoryVoList);
+                //递归：把新找到的子目录再调用该方法继续找下一级子目录
+                findSubCategory(subCategoryVoList, categoryList);
+            }
+        }
+    }
+
+    private CategoryVo category2CategoryVo(Category category){
+        CategoryVo categoryVo = new CategoryVo();
+        BeanUtils.copyProperties(category, categoryVo);
+        return  categoryVo;
+    }
+}
+
+```
+
+
+
