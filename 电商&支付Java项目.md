@@ -1623,8 +1623,215 @@ public class CategoryServiceImpl implements ICategoryService {
         return  categoryVo;
     }
 }
-
 ```
 
 
 
+
+
+## 10.商品模块
+
+### 10.1 获取商品列表
+
+查询 这种方法会导致一直查数据库
+
+```java
+@Override
+    public void findSubCategoryId(Integer id, Set<Integer> resultSet) {
+        List<Category> categories = categoryMapper.selectAll();
+        for(Category category : categories){
+            if (category.getParentId().equals(id)){
+                resultSet.add(category.getId());
+                findSubCategoryId(category.getId(), resultSet);
+            }
+        }
+    }
+```
+
+
+
+这样修改可以防止重复查数据库
+
+```java
+@Override
+    public void findSubCategoryId(Integer id, Set<Integer> resultSet) {
+        List<Category> categories = categoryMapper.selectAll();
+        findSubCategoryId(id, resultSet, categories);
+    }
+
+    private void findSubCategoryId(Integer id, Set<Integer> resultSet, List<Category> categories){
+        for(Category category : categories){
+            if (category.getParentId().equals(id)){
+                resultSet.add(category.getId());
+                findSubCategoryId(category.getId(), resultSet, categories);
+            }
+        }
+    }
+```
+
+
+
+```java
+List<Product> selectByCategoryIdSet(@Param("categoryIdSet") Set<Integer> categoryIdSet);
+```
+
+这里入参是Set，需要添加@Param("categoryIdSet")并映射到Mapper中
+
+```xml
+<select id="selectByCategoryIdSet" resultMap="BaseResultMap">
+  select
+  <include refid="Base_Column_List" />
+  from mall_product
+  where status = 1
+  <if test="categoryIdSet != null">
+    and category_id in
+    <foreach collection="categoryIdSet" item="item" index="index" open="(" separator="," close=")">
+      #{item}
+    </foreach>
+
+  </if>
+</select>
+```
+
+
+
+此时还要注意一点：当传入的categotyIdSet为null时，需要查询所有商品（需求）
+
+方式一：判断categoId状态后再执行语句；注意还要再传入SQL语句参数时候若categotyIdSet没参数则传入null，否则正常传参（因为categotyId为null时候，并不能把null字符串add到Set中，此时Set中的size为0，即无任何参数。
+
+```java
+@Override
+    public ResponseVo<List<ProductVo>> list(Integer categoryId, Integer pageNum, Integer pageSize) {
+        Set<Integer> categoryIdSet = new HashSet<>();
+        if (categoryId != null){
+            categoryService.findSubCategoryId(categoryId,categoryIdSet);
+            categoryIdSet.add(categoryId);
+        }
+
+        List<Product> products = productMapper.selectByCategoryIdSet(categoryIdSet.size() == 0 ? null : categoryIdSet);
+        log.info("products = {}" , products);
+        return null;
+    }
+```
+
+方式二（推荐）：
+
+```java
+<select id="selectByCategoryIdSet" resultMap="BaseResultMap">
+    select
+    <include refid="Base_Column_List" />
+    from mall_product
+    where status = 1
+    <if test="categoryIdSet.size() > 0">
+      and category_id in
+      <foreach collection="categoryIdSet" item="item" index="index" open="(" separator="," close=")">
+        #{item}
+      </foreach>
+    </if>
+  </select>
+```
+
+
+
+遇到的BUG：加入断言后报错，Debug发现responseVo一直为null，再进一步发现是ServiceImpl忘记了return responseVo.success(T data)
+
+```java
+Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+```
+
+
+
+加入分页功能， 使用PageHelper插件，加入依赖
+
+```xml
+<!-- https://mvnrepository.com/artifact/com.github.pagehelper/pagehelper-spring-boot-starter -->
+        <dependency>
+            <groupId>com.github.pagehelper</groupId>
+            <artifactId>pagehelper-spring-boot-starter</artifactId>
+            <version>1.2.13</version>
+        </dependency>
+```
+
+Service实现功能
+
+```java
+@Override
+    public ResponseVo<PageInfo> list(Integer categoryId, Integer pageNum, Integer pageSize) {
+        Set<Integer> categoryIdSet = new HashSet<>();
+        if (categoryId != null){
+            categoryService.findSubCategoryId(categoryId,categoryIdSet);
+            categoryIdSet.add(categoryId);
+        }
+
+        PageHelper.startPage(pageNum, pageSize);
+        List<Product> productList = productMapper.selectByCategoryIdSet(categoryIdSet);
+        List<ProductVo> productVoList = productList.stream()
+                .map(e->{
+                    ProductVo productVo = new ProductVo();
+                    BeanUtils.copyProperties(e, productVo);
+                    return productVo;
+                })
+                .collect(Collectors.toList());
+
+        PageInfo pageInfo = new PageInfo(productList);
+        pageInfo.setList(productVoList);
+
+//        List<Product> products = productMapper.selectByCategoryIdSet(categoryIdSet.size() == 0 ? null : categoryIdSet);
+//        log.info("products = {}" , products);
+        return ResponseVo.success(pageInfo);
+    }
+```
+
+单元测试通过后，加入Controller层中实现业务（参数非必填，且有默认值）
+
+```java
+@GetMapping("/products")
+    public ResponseVo<PageInfo> list(@RequestParam(required = false) Integer categoryId,
+                                     @RequestParam(required = false, defaultValue = "1") Integer pageNum,
+                                     @RequestParam(required = false, defaultValue = "10") Integer pageSize){
+        return productService.list(categoryId, pageNum, pageSize);
+    }
+```
+
+
+
+### 10.2 获取商品详情
+
+Service层
+
+```java
+@Override
+public ResponseVo<ProductDetailVo> detail(Integer productId) {
+    Product product = productMapper.selectByPrimaryKey(productId);
+
+    //只对确定性条件判断
+    if(product.getStatus().equals(ProductStatusEnum.OFF_SALE.getCode()) ||
+            product.getStatus().equals(ProductStatusEnum.DELETE.getCode())){
+        return ResponseVo.error(ResponseEnum.PRODUCT_OFF_SALE_OR_DELETE);
+    }
+
+    ProductDetailVo productDetailVo = new ProductDetailVo();
+    BeanUtils.copyProperties(product, productDetailVo);
+    productDetailVo.setStock(product.getStock() > 100 ? 100 : product.getStock()); //对敏感数据处理，大于100都只显示100
+    return ResponseVo.success(productDetailVo);
+}
+```
+
+Controller层 （注意这里使用RequestMapping URI映射 即（products/{productID})
+
+```java
+@GetMapping("/products/{productId}")
+public ResponseVo<ProductDetailVo> detail(@PathVariable Integer productId){
+    return productService.detail(productId);
+}
+```
+
+
+
+
+
+## 11.购物车模块
+
+Redis（高性能）
+
+MongoDB（海量数据）
