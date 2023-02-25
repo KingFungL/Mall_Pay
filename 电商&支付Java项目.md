@@ -1834,4 +1834,127 @@ public ResponseVo<ProductDetailVo> detail(@PathVariable Integer productId){
 
 Redis（高性能）
 
+增加redis依赖
+
+```xml
+				<dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+```
+
+```yml
+spring:
+  redis:
+    host: 127.0.0.1
+    port: 6379
+```
+
+序列化插件gson
+
+```xml
+<dependency>
+    <groupId>com.google.code.gson</groupId>
+    <artifactId>gson</artifactId>
+</dependency>
+```
+
+
+
 MongoDB（海量数据）
+
+### 11.1 业务逻辑实现(购物车中添加商品)
+
+要判断哪些应该存进Redis，哪些不应该！ 具有时效性的数据不应该存在redis中
+
+Service层的实现 CartServiceImpl
+
+```java
+@Service
+@Slf4j
+public class CartServiceImpl implements ICartService {
+
+    private final static String CART_REDIS_KEY_TEMPLATE = "cary_%d";
+
+    @Autowired
+    private ProductMapper productMapper;
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    private Gson gson = new Gson();
+
+    @Override
+    public ResponseVo<CartVo> add(Integer uid, CartAddForm form) {
+        Integer quantity = 1;
+
+        Product product = productMapper.selectByPrimaryKey(form.getProductId());
+
+        //判断商品是否存在
+        if(product == null){
+            return ResponseVo.error(ResponseEnum.PRODUCT_NOT_EXIST);
+        }
+
+        //商品是否正常在售
+        if(!product.getStatus().equals(ProductStatusEnum.ON_SALE.getCode())){
+            return ResponseVo.error(ResponseEnum.PRODUCT_OFF_SALE_OR_DELETE);
+        }
+
+        //商品库存是否充足
+        if(product.getStock() <= 0){
+            return ResponseVo.error(ResponseEnum.PRODUCT_STOCK_ERROR);
+        }
+
+        //写入到Redis
+        //key：caty_1 使用Hash结构实现Redis高性能
+        HashOperations<String, String, String> opsForHash = redisTemplate.opsForHash();
+        String redisKey = String.format(CART_REDIS_KEY_TEMPLATE, uid);
+        //从redis读出数据
+        Cart cart;
+        String value = opsForHash.get(redisKey, String.valueOf(product.getId()));
+        if(StringUtils.isEmpty(value)){
+            //没有该商品
+            cart = new Cart(product.getId(), quantity, form.getSelected());
+        }else{
+            //已经有了，数量+1
+            cart = gson.fromJson(value, Cart.class);
+            cart.setQuantity(cart.getQuantity() + quantity);
+        }
+
+        opsForHash.put(String.format(CART_REDIS_KEY_TEMPLATE, uid),
+                String.valueOf(product.getId()),
+                gson.toJson(cart));
+
+        return null;
+    }
+}
+```
+
+
+
+单元测试：
+
+```java
+public class ICartServiceTest extends MallApplicationTests {
+
+    @Autowired
+    private ICartService cartService;
+
+    @Test
+    public void add(){
+        CartAddForm form = new CartAddForm();
+        form.setProductId(26);
+        form.setSelected(true);
+        cartService.add(1, form);
+
+    }
+}
+```
+
+控制台报错信息：     
+
+```
+org.springframework.data.redis.RedisSystemException: Error in execution; nested exception is io.lettuce.core.RedisCommandExecutionException: WRONGTYPE Operation against a key holding the wrong kind of value
+```
+
+原因：Redis由之前的key、value的Set改成了HashMap来实现，因此redis中的Set数据会冲突（解决方法：先把过去的数据清除掉）
