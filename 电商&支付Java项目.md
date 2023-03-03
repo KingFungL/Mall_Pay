@@ -1963,3 +1963,208 @@ org.springframework.data.redis.RedisSystemException: Error in execution; nested 
 
 ### 11.2 购物车-列表
 
+返回购物车列表的接口业务Service层代码：
+
+```java
+@Override
+public ResponseVo<CartVo> list(Integer uid) {
+
+    HashOperations<String, String, String> opsForHash = redisTemplate.opsForHash();
+    String redisKey = String.format(CART_REDIS_KEY_TEMPLATE, uid);
+    Map<String, String> entries =  opsForHash.entries(redisKey);
+
+    boolean selectAll = true;
+    Integer cartTotalQuantity = 0;
+    BigDecimal cartTotalPrice = BigDecimal.ZERO;
+
+    CartVo cartVo = new CartVo();
+    List<CartProductVo> cartProductVoList = new ArrayList<>();
+
+    for (Map.Entry<String, String> entry : entries.entrySet()) {
+        Integer productId = Integer.valueOf(entry.getKey());
+        Cart cart = gson.fromJson(entry.getValue(), Cart.class);
+
+        //TODO 需要优化，使用mysql的in（避免for循环查数据）
+        Product product = productMapper.selectByPrimaryKey(productId);
+        if(product != null){
+            CartProductVo cartProductVo = new CartProductVo(productId,
+                    cart.getQuantity(),
+                    product.getName(),
+                    product.getSubtitle(),
+                    product.getMainImage(),
+                    product.getPrice(),
+                    product.getStatus(),
+                    product.getPrice().multiply(BigDecimal.valueOf(cart.getQuantity())),
+                    product.getStock(),
+                    cart.getProductSelected()
+                    );
+            cartProductVoList.add(cartProductVo);
+
+            if(!cart.getProductSelected()){
+                selectAll = false;
+            }
+
+            //业务：计算总价（只计算选中的）
+            if(cart.getProductSelected()){
+                cartTotalPrice = cartTotalPrice.add(cartProductVo.getProductTotalPrice()); //add方法需要重新返回累加后的值
+            }
+
+        }
+
+        cartTotalQuantity += cart.getQuantity();
+    }
+
+    //有一个未选中就不是全选
+    cartVo.setSelectAll(selectAll);
+    cartVo.setCartTotalQuantity(cartTotalQuantity);
+    cartVo.setCartTotalPrice(cartTotalPrice);
+
+    cartVo.setCartProductVoList(cartProductVoList);
+    return ResponseVo.success(cartVo);
+}
+```
+
+
+
+### 11.3 购物车—更新&删除
+
+
+
+
+
+### 11.5 全单元测试
+
+```java
+@Slf4j
+public class ICartServiceTest extends MallApplicationTests {
+
+    @Autowired
+    private ICartService cartService;
+
+    private Gson gson = new GsonBuilder().setPrettyPrinting().create();
+
+    private Integer uid = 1;
+
+    private Integer productId = 26;
+
+    @Before
+    public void add(){
+        log.info("【新增购物车...】");
+        CartAddForm form = new CartAddForm();
+        form.setProductId(productId);
+        form.setSelected(true);
+        ResponseVo<CartVo> responseVo = cartService.add(uid, form);
+        log.info("list={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @Test
+    public void list(){
+        ResponseVo<CartVo> responseVo = cartService.list(uid);
+        log.info("list={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @Test
+    public void update(){
+        CartUpdateForm form = new CartUpdateForm();
+        form.setQuantity(10);
+//        form.setSelected();
+        ResponseVo<CartVo> responseVo = cartService.update(uid, productId, form);
+        log.info("update={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @After
+    public void delete(){
+        log.info("【删除购物车...】");
+        ResponseVo<CartVo> responseVo = cartService.delete(uid, productId);
+        log.info("result={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @Test
+    public void selectAll(){
+        ResponseVo<CartVo> responseVo = cartService.selectAll(uid);
+        log.info("result={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @Test
+    public void unSelectAll(){
+        ResponseVo<CartVo> responseVo = cartService.unSelectAll(uid);
+        log.info("result={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+
+    @Test
+    public void sum(){
+        ResponseVo<Integer> responseVo = cartService.sum(uid);
+        log.info("result={}", gson.toJson(responseVo));
+        Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
+    }
+}
+```
+
+BUG：加入断言后一直报错（已解决）
+
+原因是：Service实现层中对于方法的返回值写成了null，这样就导致断言执行到responseVo.getStatus()时未找到responseVo；在我们的其他方法返回值是list(uid)，list的类型是ResponseVo，把列表返回，再从列表中找到Status状态来判断时候执行成功
+
+
+
+### 11.6 联通Controller
+
+```java
+@RestController
+public class CartController {
+
+    @Autowired
+    private ICartService cartService;
+
+    @GetMapping("/carts")
+    public ResponseVo<CartVo> list(HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.list(user.getId());
+    }
+
+    @PostMapping("/carts")
+    public ResponseVo<CartVo> add(@Valid @RequestBody CartAddForm cartAddForm,
+                                  HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.add(user.getId(), cartAddForm);
+    }
+
+    @PutMapping("/carts/{productId}")
+    public ResponseVo<CartVo> update(@PathVariable Integer productId,
+                                    @Valid @RequestBody CartUpdateForm form,
+                                     HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.update(user.getId(), productId, form);
+    }
+
+    @PutMapping("/carts/selectAll")
+    public ResponseVo<CartVo> selectAll(HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.selectAll(user.getId());
+    }
+
+    @PutMapping("/carts/unSelectAll")
+    public ResponseVo<CartVo> unSelectAll(HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.unSelectAll(user.getId());
+    }
+
+    @GetMapping("/carts/products/sum")
+    public ResponseVo<Integer> sum(HttpSession session){
+
+        User user = (User) session.getAttribute(MallConst.CURRENT_USER);
+        return cartService.sum(user.getId());
+    }
+
+}
+```
