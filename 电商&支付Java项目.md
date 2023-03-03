@@ -1958,3 +1958,8 @@ org.springframework.data.redis.RedisSystemException: Error in execution; nested 
 ```
 
 原因：Redis由之前的key、value的Set改成了HashMap来实现，因此redis中的Set数据会冲突（解决方法：先把过去的数据清除掉）
+
+
+
+### 11.2 购物车-列表
+
