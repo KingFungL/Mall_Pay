@@ -34,6 +34,13 @@ public enum ResponseEnum {
 
     CART_PRODUCT_NOT_EXIST(15,"购物车里无此商品"),
 
+    DELETE_SHIPPING_FAIL(16, "删除收获地址失败"),
+
+    SHIPPING_NOT_EXIST(17, "地址不存在"),
+
+    CART_SELECTED_IS_EMPTY(18, "请选择商品后下单"),
+
+
     ;
 
 

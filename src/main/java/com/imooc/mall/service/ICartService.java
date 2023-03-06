@@ -2,8 +2,11 @@ package com.imooc.mall.service;
 
 import com.imooc.mall.form.CartAddForm;
 import com.imooc.mall.form.CartUpdateForm;
+import com.imooc.mall.pojo.Cart;
 import com.imooc.mall.vo.CartVo;
 import com.imooc.mall.vo.ResponseVo;
+
+import java.util.List;
 
 /**
  * @author King
@@ -25,4 +28,6 @@ public interface ICartService {
     ResponseVo<CartVo> unSelectAll(Integer uid);
 
     ResponseVo<Integer> sum(Integer uid);
+
+    List<Cart> listForCart(Integer uid);
 }

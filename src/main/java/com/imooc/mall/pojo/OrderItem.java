@@ -1,8 +1,11 @@
 package com.imooc.mall.pojo;
 
+import lombok.Data;
+
 import java.math.BigDecimal;
 import java.util.Date;
 
+@Data
 public class OrderItem {
     private Integer id;
 

@@ -2168,3 +2168,172 @@ public class CartController {
 
 }
 ```
+
+
+
+
+
+## 12.收获地址开发
+
+### 12.1 新增收获地址
+
+```java
+@Override
+    public ResponseVo<Map<String, Integer>> add(Integer uid, ShippingForm form) {
+        Shipping shipping = new Shipping();
+        BeanUtils.copyProperties(form, shipping);
+        shipping.setUserId(uid);
+        int row = shippingMapper.insertSelective(shipping);
+        if (row == 0){
+            return ResponseVo.error(ResponseEnum.ERROR);
+        }
+
+        Map<String, Integer> map = new HashMap<>();
+        map.put("shippingId", shipping.getId());
+
+        return ResponseVo.success(map);
+    }
+```
+
+time时间相关使用数据库自带的时间数据去更新
+
+id使用自增主键
+
+```
+<insert id="insertSelective" parameterType="com.imooc.mall.pojo.Shipping" useGeneratedKeys="true" keyProperty="id">
+```
+
+### 12.2 删除&更新收获地址
+
+使用软删除的方式
+
+```java
+@Override
+public ResponseVo delete(Integer uid, Integer shippingId) {
+    int row = shippingMapper.deleteByIdAndUid(uid, shippingId);
+    if (row == 0){
+        return ResponseVo.error(ResponseEnum.DELETE_SHIPPING_FAIL);
+    }
+    return ResponseVo.success();
+}
+```
+
+
+
+更新：
+
+```java
+@Override
+public ResponseVo update(Integer uid, Integer shippingId, ShippingForm form) {
+    Shipping shipping = new Shipping();
+    BeanUtils.copyProperties(form, shipping);
+    shipping.setUserId(uid);
+    shipping.setId(shippingId);
+    int row = shippingMapper.updateByPrimaryKeySelective(shipping);
+    if (row == 0){
+        return ResponseVo.error(ResponseEnum.ERROR);
+    }
+    return ResponseVo.success();
+}
+```
+
+
+
+
+
+## 13.订单模块
+
+### 13.1 流程分析
+
+  `product_id` int DEFAULT NULL COMMENT '商品id',
+  `product_name` varchar(100) DEFAULT NULL COMMENT '商品名称',
+  `product_image` varchar(500) DEFAULT NULL COMMENT '商品图片地址',
+
+商品的这些字段在订单里再存一次，原因是这些数据是变化的。订单一旦支付好，很多数据是不可变的！
+
+**不可变：商品图片、收获地址**。   可变：状态
+
+
+
+### 13.2 创建订单-购物车
+
+
+
+
+
+### 13.3 构造OrderItem
+
+
+
+```java
+//  创建订单的方法（提高代码阅读性）
+private OrderItem bulidOrderItem(Integer uid, Long orderNo,  Integer quantity, Product product) {
+    OrderItem item = new OrderItem();
+    item.setUserId(uid);
+    item.setOrderNo(orderNo);
+    item.setProductId(product.getId());
+    item.setProductName(product.getName());
+    item.setProductImage(product.getMainImage());
+    item.setCurrentUnitPrice(product.getPrice());
+    item.setQuantity(quantity);
+    item.setTotalPrice(product.getPrice().multiply(BigDecimal.valueOf(quantity)));
+
+    return item;
+  
+  private Order bulidOrder(Integer uid,
+                             Long orderNo,
+                             Integer shippingId,
+                             List<OrderItem> orderItemList) {
+        //价格去做累加计算，使用BigDecimal防止精度损失
+        BigDecimal payment = orderItemList.stream()
+                .map(OrderItem::getTotalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Order order = new Order();
+        order.setOrderNo(orderNo);
+        order.setUserId(uid);
+        order.setShippingId(shippingId);
+        order.setPayment(payment);//累加后的结果set进order里面
+        order.setPaymentType(PaymentTypeEnum.PAY_ONLINE.getCode());
+        order.setPostage(0); //暂时无涉及运费，先入0
+        order.setStatus(OrderStatusEnum.NO_PAY.getCode());
+
+        return order;
+    }
+
+    /**
+    * 企业级用：分布式唯一id/主键（后续学习）
+    * @param
+    * @return
+    */
+    private Long generateOrderNo() {
+        return System.currentTimeMillis() + new Random().nextInt(999);
+    }
+```
+
+
+
+批量插入的sql语句
+
+```xml
+<insert id="batchInsert" parameterType="list">
+    insert into mall_order_item (user_id, order_no,
+                                 product_id, product_name, product_image,
+                                 current_unit_price, quantity, total_price
+                                )
+    values
+    <foreach collection="orderItemList" index="index" item="item" separator=",">
+      (
+       #{item.userId},
+       #{item.orderNo},
+       #{item.productId},
+       #{item.productName},
+       #{item.productImage},
+       #{item.currentUnitPrice},
+       #{item.quantity},
+       #{item.totalPrice}
+       )
+    </foreach>
+  </insert>
+```
+

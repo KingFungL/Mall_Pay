@@ -34,7 +34,7 @@ public class ICartServiceTest extends MallApplicationTests {
 
     private Integer productId = 26;
 
-    @Before
+    @Test
     public void add(){
         log.info("【新增购物车...】");
         CartAddForm form = new CartAddForm();
@@ -62,7 +62,7 @@ public class ICartServiceTest extends MallApplicationTests {
         Assert.assertEquals(ResponseEnum.SUCCESS.getCode(), responseVo.getStatus());
     }
 
-    @After
+    @Test
     public void delete(){
         log.info("【删除购物车...】");
         ResponseVo<CartVo> responseVo = cartService.delete(uid, productId);
