@@ -11,9 +11,11 @@ import com.imooc.mall.enums.ResponseEnum;
 import com.imooc.mall.pojo.*;
 import com.imooc.mall.service.ICartService;
 import com.imooc.mall.service.IOrderService;
+import com.imooc.mall.vo.OrderItemVo;
 import com.imooc.mall.vo.OrderVo;
 import com.imooc.mall.vo.ResponseVo;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -64,9 +66,6 @@ public class OrderServiceImpl implements IOrderService {
             return ResponseVo.error(ResponseEnum.CART_SELECTED_IS_EMPTY);
         }
 
-
-
-
         //获取cartList里的productLists
         Set<Integer> productIdSet = cartList.stream()
                 .map(Cart::getProductId)
@@ -98,9 +97,15 @@ public class OrderServiceImpl implements IOrderService {
                         "库存不正确. " + product.getName());
             }
 
-
             OrderItem orderItem = bulidOrderItem(uid, orderNo, cart.getQuantity(), product);
             orderItemList.add(orderItem);
+
+            //减库存（库存充足的情况下执行）
+            product.setStock(product.getStock() - cart.getQuantity());
+            int row = productMapper.updateByPrimaryKeySelective(product);
+            if (row <= 0){
+                return ResponseVo.error(ResponseEnum.ERROR);
+            }
         }
         //计算总价
         //生成订单，入库：order和order_item，使用事务
@@ -118,13 +123,36 @@ public class OrderServiceImpl implements IOrderService {
         if (rowForOrderItem <= 0){
             return ResponseVo.error(ResponseEnum.ERROR);
         }
-        //减库存
 
         //更新购物车（选中的商品）
+        //redis有事务（redis是单线程的，打包命令），不能回滚,通过写补偿（删除后重新添加）的方法来模拟回滚
+        //场景：假如购物车有两件商品，第一件商品成功购买，此时如果更新了redis的内容，则当第二件商品出现错误mysql要回滚时，redis无法回滚，这样会导致数据的丢失和出错。为避免错误，更新购物车应该重新写一个循环
+        for (Cart cart : cartList){
+            cartService.delete(uid, cart.getProductId());
+        }
 
         //构造orderVo对象返回前端
+        OrderVo orderVo = bulidOrderVo(order, orderItemList, shipping);
 
-        return ResponseVo.success();
+        return ResponseVo.success(orderVo);
+    }
+
+    private OrderVo bulidOrderVo(Order order, List<OrderItem> orderItemList, Shipping shipping) {
+
+        OrderVo orderVo = new OrderVo();
+        BeanUtils.copyProperties(order, orderVo);
+
+        List<OrderItemVo> orderItemVoList = orderItemList.stream().map(e -> {
+            OrderItemVo orderItemVo = new OrderItemVo();
+            BeanUtils.copyProperties(e, orderItemVo);
+            return orderItemVo;
+        }).collect(Collectors.toList());
+
+        orderVo.setOrderItemVoList(orderItemVoList);
+        orderVo.setShippingId(shipping.getId());
+        orderVo.setShippingVo(shipping);
+
+        return orderVo;
     }
 
     private Order bulidOrder(Integer uid,
